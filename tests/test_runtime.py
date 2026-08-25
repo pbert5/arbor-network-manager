@@ -22,6 +22,11 @@ class FakeProvider:
         return {"applied": True}
 
 
+class CapabilityProvider(FakeProvider):
+    def capabilities(self, payload):
+        return {"capabilities": ["local-endpoints", "health"]}
+
+
 class RuntimeTests(unittest.TestCase):
     def test_reconcile_uses_accepted_state_and_is_repeatable(self):
         provider = FakeProvider()
@@ -50,6 +55,13 @@ class RuntimeTests(unittest.TestCase):
         manager.reconcile(snapshot)
         peers = provider.applied[-1]["peers"]
         self.assertEqual([peer["node"] for peer in peers], ["a"])
+
+    def test_provider_without_dynamic_peers_is_not_called(self):
+        provider = CapabilityProvider()
+        manager = RuntimeManager()
+        manager.register("lan", provider)
+        manager.reconcile(NetworkSnapshot((Vertex("a"),), (), (), "digest-3"))
+        self.assertEqual(provider.applied, [])
 
 
 if __name__ == "__main__":

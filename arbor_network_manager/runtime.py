@@ -5,11 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any, Mapping, Protocol
 
-from .model import Edge, Endpoint, Health, NetworkSnapshot
+from .model import Edge, Endpoint, EndpointObservation, Health, NetworkSnapshot
 
 
 class Provider(Protocol):
     def status(self, payload: Mapping[str, Any]) -> Mapping[str, Any]: ...
+    def capabilities(self, payload: Mapping[str, Any]) -> Mapping[str, Any]: ...
     def local_endpoints(self, payload: Mapping[str, Any]) -> Mapping[str, Any]: ...
     def health(self, payload: Mapping[str, Any]) -> Mapping[str, Any]: ...
     def apply_peers(self, payload: Mapping[str, Any]) -> Mapping[str, Any]: ...
@@ -22,6 +23,7 @@ class ProviderState:
     health: Health = Health.UNKNOWN
     observed_endpoints: tuple[Endpoint, ...] = ()
     applied_generations: tuple[tuple[str, int], ...] = ()
+    capabilities: tuple[str, ...] = ()
 
 
 class RuntimeManager:
@@ -54,28 +56,57 @@ class RuntimeManager:
         for name in sorted(self._providers):
             provider = self._providers[name]
             status = provider.status({})
+            capability_method = getattr(provider, "capabilities", None)
+            capability_payload = capability_method({}) if capability_method else {}
+            capabilities = frozenset(str(item) for item in capability_payload.get("capabilities", []))
             endpoint_payload = provider.local_endpoints({})
             health_payload = provider.health({})
             desired = accepted_by_provider.get(name, [])
-            provider.apply_peers({"peers": [self._endpoint_record(item) for item in desired]})
+            # Missing capabilities is a deliberately retained v1 compatibility
+            # behavior. Once a provider advertises capabilities, unsupported
+            # operations are never invoked.
+            if not capabilities or "dynamic-peers" in capabilities:
+                apply_method = getattr(provider, "apply_peers", None)
+                if apply_method:
+                    apply_method({"peers": [self._endpoint_record(item) for item in desired]})
             local = tuple(self._parse_endpoint(item, name) for item in endpoint_payload.get("endpoints", []))
             observed.extend(local)
-            health = Health(str(health_payload.get("health", status.get("health", Health.UNKNOWN.value))))
+            health = Health(str(health_payload.get("health", Health.UNKNOWN.value)))
             self._states[name] = ProviderState(
                 name=name,
                 ready=bool(status.get("ready", False)),
                 health=health,
                 observed_endpoints=local,
                 applied_generations=tuple(sorted((item.node, item.generation) for item in desired)),
+                capabilities=tuple(sorted(capabilities)),
             )
 
-        health_by_provider = {state.name: state.health for state in self.states}
+        observation_by_key = {
+            (item.node, item.network, item.provider, item.generation): item
+            for item in observed
+        }
+        legacy_health = {
+            state.name: state.health for state in self.states if not state.capabilities
+        }
         edges = tuple(
-            replace(edge, health=health_by_provider.get(edge.provider, Health.UNREACHABLE))
+            replace(
+                edge,
+                health=(
+                    observation_by_key.get(
+                        (edge.target, edge.network, edge.provider, edge.endpoint_generation),
+                        EndpointObservation(edge.target, edge.network, edge.provider, "", edge.endpoint_generation),
+                    ).health
+                    if edge.provider not in legacy_health
+                    else legacy_health[edge.provider]
+                ),
+            )
             for edge in accepted.edges
             if edge.provider in self._providers and not edge.endpoint_revoked
         )
-        return NetworkSnapshot(accepted.vertices, edges, tuple(observed), accepted.digest)
+        return NetworkSnapshot(
+            accepted.vertices, edges, accepted.endpoints, accepted.digest,
+            tuple(observed), accepted.strict_authority,
+        )
 
     def ready(self, required: tuple[str, ...] = ()) -> bool:
         return all(self._states.get(name, ProviderState(name)).ready for name in required)
@@ -87,7 +118,11 @@ class RuntimeManager:
                 "capabilities": sorted(endpoint.capabilities)}
 
     @staticmethod
-    def _parse_endpoint(value: Mapping[str, Any], provider: str) -> Endpoint:
-        return Endpoint(node=str(value["node"]), network=str(value["network"]), provider=provider,
-                        address=str(value["address"]), generation=int(value["generation"]),
-                        capabilities=frozenset(str(item) for item in value.get("capabilities", [])))
+    def _parse_endpoint(value: Mapping[str, Any], provider: str) -> EndpointObservation:
+        return EndpointObservation(
+            node=str(value["node"]), network=str(value["network"]), provider=provider,
+            address=str(value["address"]), generation=int(value["generation"]),
+            health=Health(str(value.get("health", Health.UNKNOWN.value))),
+            reachable=value.get("reachable") if value.get("reachable") is None else bool(value["reachable"]),
+            capabilities=frozenset(str(item) for item in value.get("capabilities", [])),
+        )

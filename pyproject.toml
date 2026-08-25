@@ -11,3 +11,4 @@ requires-python = ">=3.11"
 [project.scripts]
 arbor-networkd = "arbor_network_manager.daemon:main"
 arbor-network-provider-lan = "arbor_network_manager.providers:lan_main"
+arbor-network-provider-ygg = "arbor_network_manager.providers:ygg_main"

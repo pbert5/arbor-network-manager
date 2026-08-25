@@ -117,6 +117,36 @@ class YggDynamicPeerProvider:
         return {"applied": True, "count": len(self.desired)}
 
 
+class YggCtlProvider(YggDynamicPeerProvider):
+    """Yggdrasil control-socket adapter for accepted desired peers."""
+
+    def __init__(self, control_command: str = "yggdrasilctl") -> None:
+        super().__init__()
+        self.control_command = control_command
+
+    def apply_peers(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        result = super().apply_peers(payload)
+        desired_uris = {str(peer["uri"]) for peer in self.desired if peer.get("uri")}
+        try:
+            current_output = subprocess.run(
+                [self.control_command, "-json", "getpeers"],
+                check=True, capture_output=True, text=True, timeout=5,
+            ).stdout
+            current = json.loads(current_output)
+            current_records = current if isinstance(current, list) else current.get("peers", []) if isinstance(current, Mapping) else []
+            current_uris = {
+                str(peer.get("uri")) for peer in current_records
+                if isinstance(peer, Mapping) and peer.get("uri")
+            }
+            for uri in sorted(current_uris - desired_uris):
+                subprocess.run([self.control_command, "removepeer", f"uri={uri}"], check=True, timeout=5, capture_output=True)
+            for uri in sorted(desired_uris - current_uris):
+                subprocess.run([self.control_command, "addpeer", f"uri={uri}"], check=True, timeout=5, capture_output=True)
+        except (OSError, subprocess.SubprocessError, ValueError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Yggdrasil control reconciliation failed: {exc}") from exc
+        return result
+
+
 def lan_main() -> None:
     from .transport import ProviderSocketServer
 
@@ -126,6 +156,22 @@ def lan_main() -> None:
     parser.add_argument("--interface")
     args = parser.parse_args()
     server = ProviderSocketServer(args.socket, LanProvider(args.node, args.interface))
+    server.start()
+    try:
+        while True:
+            time.sleep(3600)
+    finally:
+        server.close()
+
+
+def ygg_main() -> None:
+    from .transport import ProviderSocketServer
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--socket", required=True)
+    parser.add_argument("--control-command", default="yggdrasilctl")
+    args = parser.parse_args()
+    server = ProviderSocketServer(args.socket, YggCtlProvider(args.control_command))
     server.start()
     try:
         while True:

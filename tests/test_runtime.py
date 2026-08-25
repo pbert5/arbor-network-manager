@@ -26,6 +26,12 @@ class CapabilityProvider(FakeProvider):
     def capabilities(self, payload):
         return {"capabilities": ["local-endpoints", "health"]}
 
+    def health(self, payload):
+        self.targets = payload["targets"]
+        return {"health": "unknown", "endpoints": [{
+            **payload["targets"][0], "health": "healthy", "reachable": True,
+        }]} if payload["targets"] else {"health": "unknown", "endpoints": []}
+
 
 class RuntimeTests(unittest.TestCase):
     def test_reconcile_uses_accepted_state_and_is_repeatable(self):
@@ -62,6 +68,21 @@ class RuntimeTests(unittest.TestCase):
         manager.register("lan", provider)
         manager.reconcile(NetworkSnapshot((Vertex("a"),), (), (), "digest-3"))
         self.assertEqual(provider.applied, [])
+
+    def test_target_health_observation_is_joined_without_granting_authority(self):
+        provider = CapabilityProvider()
+        manager = RuntimeManager()
+        manager.register("lan", provider)
+        accepted = Endpoint("target", "lan", "lan", "10.0.0.2", 3, frozenset({"ssh"}))
+        snapshot = NetworkSnapshot(
+            (Vertex("source"), Vertex("target")),
+            (Edge("source", "target", "lan", "lan", 1, capabilities=frozenset({"ssh"}), endpoint_generation=3),),
+            (accepted,), "digest-target", True,
+        )
+        reconciled = manager.reconcile(snapshot)
+        self.assertEqual(reconciled.edges[0].health, Health.HEALTHY)
+        self.assertEqual(reconciled.endpoints, (accepted,))
+        self.assertEqual(reconciled.observations[0].node, "target")
 
 
 if __name__ == "__main__":

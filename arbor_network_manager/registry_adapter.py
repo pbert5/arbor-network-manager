@@ -70,6 +70,8 @@ def snapshot_from_registry_state(
         for source, target in (("identityGeneration", "identityGeneration"), ("sshHostGeneration", "sshHostGeneration")):
             if source in payload:
                 endpoint[target] = int(payload[source])
+        if "sshHostKey" in payload:
+            endpoint["sshHostKey"] = str(payload["sshHostKey"])
         endpoints.append(endpoint)
         vertices.add(endpoint["node"])
     mapping = {

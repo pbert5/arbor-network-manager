@@ -27,8 +27,32 @@ class LanProvider:
         } for address in self._addresses()]}
 
     def health(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
-        # LAN can establish local interface health, not remote target health.
-        return {"health": "unknown", "scope": "local-interface"}
+        endpoints = []
+        for target in payload.get("targets", []):
+            if not isinstance(target, Mapping):
+                continue
+            address = str(target.get("address", ""))
+            health, reachable = self._probe(address)
+            endpoints.append({
+                "node": target["node"], "network": target["network"],
+                "address": address, "generation": target["generation"],
+                "health": health, "reachable": reachable,
+                "capabilities": target.get("capabilities", []),
+            })
+        return {"health": "unknown", "scope": "path", "endpoints": endpoints}
+
+    @staticmethod
+    def _probe(address: str) -> tuple[str, bool | None]:
+        if not address:
+            return "unknown", None
+        try:
+            result = subprocess.run(
+                ["ping", "-c", "1", "-W", "1", address],
+                check=False, capture_output=True, timeout=2,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return "unknown", None
+        return ("healthy", True) if result.returncode == 0 else ("unreachable", False)
 
     def _addresses(self) -> list[str]:
         command = ["ip", "-j", "addr", "show"]

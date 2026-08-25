@@ -27,6 +27,7 @@ class Endpoint:
     revoked: bool = False
     identity_generation: int | None = None
     ssh_host_generation: int | None = None
+    ssh_host_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -148,6 +149,7 @@ def _parse_endpoint(item: Mapping[str, object], *, accepted: bool) -> Endpoint |
             **common, revoked=bool(item.get("revoked", False)),
             identity_generation=(None if item.get("identityGeneration") is None else int(item["identityGeneration"])),
             ssh_host_generation=(None if item.get("sshHostGeneration") is None else int(item["sshHostGeneration"])),
+            ssh_host_key=(None if item.get("sshHostKey") is None else str(item["sshHostKey"])),
         )
     return EndpointObservation(
         **common,

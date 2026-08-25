@@ -61,7 +61,12 @@ class NetworkDaemon:
                 self.snapshot, str(payload["source"]), str(payload["target"]),
                 RouteConstraints(capability=str(payload.get("capability", "ssh"))),
             )
-            return {"reachable": plan.reachable, "nodes": plan.nodes, "cost": plan.cost, "explanation": plan.explain()}
+            bound = plan.bind(self.snapshot) if plan.reachable and self.snapshot.strict_authority else plan
+            return {
+                "reachable": plan.reachable, "nodes": plan.nodes, "cost": plan.cost,
+                "explanation": plan.explain(), "edges": [edge.__dict__ for edge in plan.edges],
+                "binding": None if bound.binding is None else bound.binding.__dict__,
+            }
         raise ValueError(f"unsupported daemon operation: {operation}")
 
 

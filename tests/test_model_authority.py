@@ -48,6 +48,7 @@ class AuthorityParserTests(unittest.TestCase):
                 "node": "target", "network": "lan", "provider": "lan",
                 "address": "10.0.0.2", "generation": 4,
                 "identityGeneration": 2, "sshHostGeneration": 7,
+                "sshHostKey": "ssh-ed25519 AAAAaccepted",
             }],
             "edges": [{
                 "source": "source", "target": "target", "network": "lan",

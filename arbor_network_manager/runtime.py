@@ -60,8 +60,10 @@ class RuntimeManager:
             capability_payload = capability_method({}) if capability_method else {}
             capabilities = frozenset(str(item) for item in capability_payload.get("capabilities", []))
             endpoint_payload = provider.local_endpoints({})
-            health_payload = provider.health({})
             desired = accepted_by_provider.get(name, [])
+            health_payload = provider.health({
+                "targets": [self._endpoint_record(item) for item in accepted_by_provider.get(name, [])]
+            })
             # Missing capabilities is a deliberately retained v1 compatibility
             # behavior. Once a provider advertises capabilities, unsupported
             # operations are never invoked.
@@ -71,6 +73,8 @@ class RuntimeManager:
                     apply_method({"peers": [self._endpoint_record(item) for item in desired]})
             local = tuple(self._parse_endpoint(item, name) for item in endpoint_payload.get("endpoints", []))
             observed.extend(local)
+            target_observations = tuple(self._parse_endpoint(item, name) for item in health_payload.get("endpoints", []))
+            observed.extend(target_observations)
             health = Health(str(health_payload.get("health", Health.UNKNOWN.value)))
             self._states[name] = ProviderState(
                 name=name,

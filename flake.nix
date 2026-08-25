@@ -4,6 +4,7 @@
   outputs = { self, nixpkgs }:
     let systems = [ "x86_64-linux" "aarch64-linux" ];
     in {
+      nixosModules.default = import ./nixos-module.nix;
       packages = builtins.listToAttrs (map (system: {
         name = system;
         value.default = (import nixpkgs { inherit system; }).python3Packages.buildPythonPackage {

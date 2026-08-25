@@ -24,6 +24,7 @@ class ProviderState:
     observed_endpoints: tuple[Endpoint, ...] = ()
     applied_generations: tuple[tuple[str, int], ...] = ()
     capabilities: tuple[str, ...] = ()
+    error: str | None = None
 
 
 class RuntimeManager:
@@ -56,6 +57,7 @@ class RuntimeManager:
         for name in sorted(self._providers):
             provider = self._providers[name]
             desired = accepted_by_provider.get(name, [])
+            error: str | None = None
             try:
                 status = provider.status({})
                 capability_method = getattr(provider, "capabilities", None)
@@ -78,13 +80,14 @@ class RuntimeManager:
                 observed.extend(target_observations)
                 health = Health(str(health_payload.get("health", Health.UNKNOWN.value)))
                 ready = bool(status.get("ready", False))
-            except (OSError, RuntimeError, ValueError, TypeError, KeyError):
+            except (OSError, RuntimeError, ValueError, TypeError, KeyError) as exc:
                 # Provider sockets and control planes are bootstrap dependencies;
                 # their absence must not take down networkd or erase authority.
                 capabilities = frozenset()
                 local = ()
                 health = Health.UNKNOWN
                 ready = False
+                error = f"{type(exc).__name__}: {exc}"
             self._states[name] = ProviderState(
                 name=name,
                 ready=ready,
@@ -92,6 +95,7 @@ class RuntimeManager:
                 observed_endpoints=local,
                 applied_generations=tuple(sorted((item.node, item.generation) for item in desired)),
                 capabilities=tuple(sorted(capabilities)),
+                error=error,
             )
 
         observation_by_key = {

@@ -52,7 +52,7 @@ class NetworkDaemon:
             if operation == "status":
                 return {"ready": self.runtime.ready(), "digest": snapshot.digest, "providers": [state.name for state in self.runtime.states], "reloadError": self.last_reload_error}
             if operation == "providers":
-                return {"providers": [{"name": state.name, "ready": state.ready, "health": state.health.value, "capabilities": list(state.capabilities)} for state in self.runtime.states]}
+                return {"providers": [{"name": state.name, "ready": state.ready, "health": state.health.value, "capabilities": list(state.capabilities), "error": state.error} for state in self.runtime.states]}
             if operation == "endpoints":
                 return {"accepted": [endpoint.__dict__ for endpoint in snapshot.endpoints], "observed": [endpoint.__dict__ for endpoint in snapshot.observations]}
             return {"snapshot": snapshot.__dict__}

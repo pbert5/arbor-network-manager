@@ -22,6 +22,10 @@
           PYTHONPATH=. python -m unittest discover -s tests -v
           touch $out
         '';
+        value.lan-vm = let
+          pkgs = import nixpkgs { inherit system; };
+          package = self.packages.${system}.default;
+        in import ./tests/lan-vm.nix { inherit pkgs; networkManagerPackage = package; };
       }) systems);
     };
 }

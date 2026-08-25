@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+import argparse
+import time
 from typing import Any, Mapping
 
 
@@ -113,3 +115,20 @@ class YggDynamicPeerProvider:
             normalized.append(dict(peer))
         self.desired = tuple(sorted(normalized, key=lambda peer: (peer["node"], peer["generation"])))
         return {"applied": True, "count": len(self.desired)}
+
+
+def lan_main() -> None:
+    from .transport import ProviderSocketServer
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--node", required=True)
+    parser.add_argument("--socket", required=True)
+    parser.add_argument("--interface")
+    args = parser.parse_args()
+    server = ProviderSocketServer(args.socket, LanProvider(args.node, args.interface))
+    server.start()
+    try:
+        while True:
+            time.sleep(3600)
+    finally:
+        server.close()

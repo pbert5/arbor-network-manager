@@ -1,7 +1,7 @@
 import unittest
 
 from arbor_network_manager import (
-    Edge, EndpointObservation, RouteSolver, Transit, Vertex, NetworkSnapshot,
+    Edge, Endpoint, EndpointObservation, RouteSolver, Transit, Vertex, NetworkSnapshot,
     snapshot_from_compatibility_mapping,
     snapshot_from_registry_mapping,
 )
@@ -69,6 +69,24 @@ class AuthorityParserTests(unittest.TestCase):
             observed.observations, True,
         )
         self.assertFalse(plan.bind(observed).binding.revalidate(changed))
+
+    def test_execution_binding_does_not_substitute_same_provider_edges(self):
+        source = Vertex("source")
+        jump = Endpoint("jump", "lan", "lan", "10.0.0.2", 4, frozenset({"ssh"}), identity_generation=8, ssh_host_generation=9)
+        target = Endpoint("target", "lan", "lan", "10.0.0.3", 5, frozenset({"ssh"}), identity_generation=10, ssh_host_generation=11)
+        edges = (
+            Edge("source", "jump", "lan", "lan", 1, capabilities=frozenset({"ssh"}), transit=Transit(ssh=True), endpoint_generation=4),
+            Edge("jump", "target", "lan", "lan", 1, capabilities=frozenset({"ssh"}), transit=Transit(ssh=True), endpoint_generation=5),
+        )
+        snapshot = NetworkSnapshot((source, Vertex("jump"), Vertex("target")), edges, (jump, target), "bound", (
+            EndpointObservation("jump", "lan", "lan", "10.0.0.2", 4, reachable=True),
+            EndpointObservation("target", "lan", "lan", "10.0.0.3", 5, reachable=True),
+        ), True)
+        plan = RouteSolver().solve(snapshot, "source", "target").bind(snapshot)
+        substituted = NetworkSnapshot(snapshot.vertices, (
+            edges[0], Edge("other", "target", "lan", "lan", 1, capabilities=frozenset({"ssh"}), endpoint_generation=5),
+        ), snapshot.endpoints, "bound", snapshot.observations, True)
+        self.assertFalse(plan.binding.revalidate(substituted))
 
 
 if __name__ == "__main__":

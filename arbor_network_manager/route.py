@@ -42,12 +42,17 @@ class ExecutionBinding:
             return False
         endpoints = {(e.node, e.network, e.provider, e.generation): e for e in snapshot.endpoints if not e.revoked}
         current = tuple(snapshot.edges)
-        wanted = tuple(zip(self.edge_networks, self.edge_providers))
-        if len(current) < len(wanted):
+        expected_nodes = (self.source,) + self.jump_nodes + (self.target,)
+        if len(self.edge_networks) != len(expected_nodes) - 1:
             return False
-        for index, (network, provider) in enumerate(wanted):
-            edge = next((e for e in current[index:] if e.network == network and e.provider == provider), None)
-            if edge is None or not snapshot.endpoint_is_reachable(edge):
+        for index, (network, provider) in enumerate(zip(self.edge_networks, self.edge_providers)):
+            edge = next((e for e in current if e.source == expected_nodes[index]
+                         and e.target == expected_nodes[index + 1]
+                         and e.network == network and e.provider == provider), None)
+            if edge is None or not snapshot.endpoint_is_reachable(edge) or edge.endpoint_generation != (
+                self.target_endpoint_generation if index == len(self.edge_networks) - 1
+                else self.jump_endpoint_generations[index]
+            ):
                 return False
         target = next((e for e in snapshot.endpoints if e.node == self.target and e.generation == self.target_endpoint_generation), None)
         if target is None:

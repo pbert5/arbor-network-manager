@@ -6,6 +6,7 @@ from .model import (
     snapshot_from_registry_mapping,
 )
 from .route import ExecutionBinding, RouteConstraints, RoutePlan, RouteSolver
+from .registry_adapter import RegistryStateError, snapshot_from_registry_state
 
 __all__ = [
     "Edge",
@@ -22,4 +23,6 @@ __all__ = [
     "snapshot_from_mapping",
     "snapshot_from_registry_mapping",
     "snapshot_from_compatibility_mapping",
+    "RegistryStateError",
+    "snapshot_from_registry_state",
 ]

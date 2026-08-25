@@ -4,7 +4,7 @@ import unittest
 
 from arbor_network_manager.daemon import NetworkDaemon
 from arbor_network_manager.model import NetworkSnapshot, Vertex
-from arbor_network_manager.transport import ProviderSocketClient, ProviderSocketServer
+from arbor_network_manager.transport import ProviderSocketClient, ProviderSocketServer, SocketProvider
 
 
 class Provider:
@@ -24,6 +24,8 @@ class TransportTests(unittest.TestCase):
                 self.assertTrue(response["ok"])
                 response = client.request({"version": 1, "id": "two", "operation": "apply-peers", "payload": {}})
                 self.assertFalse(response["ok"])
+                socket_provider = SocketProvider(path)
+                self.assertTrue(socket_provider.status({})["ready"])
             finally:
                 server.close()
 
@@ -31,6 +33,16 @@ class TransportTests(unittest.TestCase):
         daemon = NetworkDaemon(NetworkSnapshot((Vertex("source"),), (), (), "digest"))
         self.assertEqual(daemon.request("status", {})["digest"], "digest")
         self.assertEqual(daemon.request("snapshot", {})["snapshot"]["digest"], "digest")
+
+    def test_daemon_reloads_accepted_registry_state(self):
+        daemon = NetworkDaemon(NetworkSnapshot((Vertex("source"),), (), (), "old"))
+        self.assertTrue(daemon.reload({
+            "format": "arbor-registry/accepted-state", "digest": "new",
+            "accepted": [{"schema": "endpoint", "recordId": "e", "generation": 1, "payload": {
+                "node": "target", "network": "lan", "provider": "lan", "address": "10.0.0.2",
+            }}],
+        }))
+        self.assertEqual(daemon.snapshot.digest, "new")
 
 
 if __name__ == "__main__":

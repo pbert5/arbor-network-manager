@@ -25,6 +25,15 @@ in
       type = lib.types.str;
       default = "/run/arbor/networkd.sock";
     };
+    providerSockets = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      description = "Provider name to Unix socket path mappings.";
+    };
+    watchInterval = lib.mkOption {
+      type = lib.types.float;
+      default = 1.0;
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -34,7 +43,12 @@ in
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       serviceConfig = {
-        ExecStart = "${cfg.package}/bin/arbor-networkd --registry-snapshot ${cfg.registrySnapshot} --socket ${cfg.socket}";
+        ExecStart = lib.escapeShellArgs ([
+          "${cfg.package}/bin/arbor-networkd"
+          "--registry-snapshot" cfg.registrySnapshot
+          "--socket" cfg.socket
+          "--watch-interval" (toString cfg.watchInterval)
+        ] ++ lib.concatLists (lib.mapAttrsToList (name: path: [ "--provider" "${name}=${path}" ]) cfg.providerSockets));
         DynamicUser = true;
         RuntimeDirectory = "arbor";
         Restart = "on-failure";

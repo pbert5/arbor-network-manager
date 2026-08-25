@@ -34,6 +34,39 @@ class ProviderSocketClient:
         return json.loads(data.decode())
 
 
+class SocketProvider:
+    """RuntimeManager-compatible provider backed by a provider socket."""
+
+    def __init__(self, path: str, timeout: float = 5.0) -> None:
+        self.client = ProviderSocketClient(path, timeout)
+        self._request_id = 0
+
+    def _call(self, operation: str, payload: dict[str, Any]) -> dict[str, Any]:
+        self._request_id += 1
+        response = self.client.request({
+            "version": 1, "id": f"networkd-{self._request_id}",
+            "operation": operation, "payload": payload,
+        })
+        if not response.get("ok"):
+            raise RuntimeError(str(response.get("error", "provider request failed")))
+        return dict(response.get("result", {}))
+
+    def status(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._call("status", payload)
+
+    def capabilities(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._call("capabilities", payload)
+
+    def local_endpoints(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._call("local-endpoints", payload)
+
+    def health(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._call("health", payload)
+
+    def apply_peers(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._call("apply-peers", payload)
+
+
 class _RequestHandler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         line = self.rfile.readline(1_048_577)
@@ -63,4 +96,3 @@ class ProviderSocketServer:
     def close(self) -> None:
         self._server.shutdown()
         self._server.server_close()
-

@@ -55,30 +55,39 @@ class RuntimeManager:
         observed: list[Endpoint] = []
         for name in sorted(self._providers):
             provider = self._providers[name]
-            status = provider.status({})
-            capability_method = getattr(provider, "capabilities", None)
-            capability_payload = capability_method({}) if capability_method else {}
-            capabilities = frozenset(str(item) for item in capability_payload.get("capabilities", []))
-            endpoint_payload = provider.local_endpoints({})
             desired = accepted_by_provider.get(name, [])
-            health_payload = provider.health({
-                "targets": [self._endpoint_record(item) for item in accepted_by_provider.get(name, [])]
-            })
-            # Missing capabilities is a deliberately retained v1 compatibility
-            # behavior. Once a provider advertises capabilities, unsupported
-            # operations are never invoked.
-            if not capabilities or "dynamic-peers" in capabilities:
-                apply_method = getattr(provider, "apply_peers", None)
-                if apply_method:
-                    apply_method({"peers": [self._endpoint_record(item) for item in desired]})
-            local = tuple(self._parse_endpoint(item, name) for item in endpoint_payload.get("endpoints", []))
-            observed.extend(local)
-            target_observations = tuple(self._parse_endpoint(item, name) for item in health_payload.get("endpoints", []))
-            observed.extend(target_observations)
-            health = Health(str(health_payload.get("health", Health.UNKNOWN.value)))
+            try:
+                status = provider.status({})
+                capability_method = getattr(provider, "capabilities", None)
+                capability_payload = capability_method({}) if capability_method else {}
+                capabilities = frozenset(str(item) for item in capability_payload.get("capabilities", []))
+                endpoint_payload = provider.local_endpoints({})
+                health_payload = provider.health({
+                    "targets": [self._endpoint_record(item) for item in desired]
+                })
+                # Missing capabilities is a deliberately retained v1
+                # compatibility behavior. Once a provider advertises
+                # capabilities, unsupported operations are never invoked.
+                if not capabilities or "dynamic-peers" in capabilities:
+                    apply_method = getattr(provider, "apply_peers", None)
+                    if apply_method:
+                        apply_method({"peers": [self._endpoint_record(item) for item in desired]})
+                local = tuple(self._parse_endpoint(item, name) for item in endpoint_payload.get("endpoints", []))
+                target_observations = tuple(self._parse_endpoint(item, name) for item in health_payload.get("endpoints", []))
+                observed.extend(local)
+                observed.extend(target_observations)
+                health = Health(str(health_payload.get("health", Health.UNKNOWN.value)))
+                ready = bool(status.get("ready", False))
+            except (OSError, RuntimeError, ValueError, TypeError, KeyError):
+                # Provider sockets and control planes are bootstrap dependencies;
+                # their absence must not take down networkd or erase authority.
+                capabilities = frozenset()
+                local = ()
+                health = Health.UNKNOWN
+                ready = False
             self._states[name] = ProviderState(
                 name=name,
-                ready=bool(status.get("ready", False)),
+                ready=ready,
                 health=health,
                 observed_endpoints=local,
                 applied_generations=tuple(sorted((item.node, item.generation) for item in desired)),

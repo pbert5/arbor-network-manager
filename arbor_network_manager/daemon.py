@@ -100,6 +100,7 @@ def serve(daemon: NetworkDaemon, path: str, registry_state: str | None = None, i
             try:
                 mtime = os.stat(registry_state).st_mtime_ns  # type: ignore[arg-type]
                 if mtime == last_mtime:
+                    daemon.reconcile()
                     continue
                 with open(registry_state, encoding="utf-8") as handle:  # type: ignore[arg-type]
                     daemon.reload(json.load(handle))

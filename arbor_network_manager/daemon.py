@@ -85,6 +85,11 @@ class _DaemonHandler(socketserver.StreamRequestHandler):
 
 
 def serve(daemon: NetworkDaemon, path: str, registry_state: str | None = None, interval: float = 1.0) -> None:
+    try:
+        if os.path.exists(path):
+            os.unlink(path)
+    except OSError as exc:
+        raise OSError(f"cannot replace network daemon socket {path}: {exc}") from exc
     server = socketserver.ThreadingUnixStreamServer(path, _DaemonHandler)
     server.daemon = daemon  # type: ignore[attr-defined]
     stop = threading.Event()
@@ -113,6 +118,10 @@ def serve(daemon: NetworkDaemon, path: str, registry_state: str | None = None, i
     finally:
         stop.set()
         server.server_close()
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
 
 
 def main() -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import socketserver
 from threading import Thread
@@ -84,6 +85,11 @@ class ProviderSocketServer:
     def __init__(self, path: str, provider: Any) -> None:
         self.path = path
         self.provider = provider
+        try:
+            if os.path.exists(path):
+                os.unlink(path)
+        except OSError as exc:
+            raise OSError(f"cannot replace provider socket {path}: {exc}") from exc
         self._server = socketserver.ThreadingUnixStreamServer(path, _RequestHandler)
         self._server.daemon_threads = True
         self._server.provider = provider  # type: ignore[attr-defined]
@@ -96,3 +102,7 @@ class ProviderSocketServer:
     def close(self) -> None:
         self._server.shutdown()
         self._server.server_close()
+        try:
+            os.unlink(self.path)
+        except FileNotFoundError:
+            pass

@@ -37,6 +37,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    users.groups.arbor-networkd = { };
+    users.users.arbor-networkd = {
+      isSystemUser = true;
+      group = "arbor-networkd";
+    };
     systemd.services.arbor-networkd = {
       description = "Arbor network manager";
       wantedBy = [ "multi-user.target" ];
@@ -49,7 +54,8 @@ in
           "--socket" cfg.socket
           "--watch-interval" (toString cfg.watchInterval)
         ] ++ lib.concatLists (lib.mapAttrsToList (name: path: [ "--provider" "${name}=${path}" ]) cfg.providerSockets));
-        DynamicUser = true;
+        User = "arbor-networkd";
+        Group = "arbor-networkd";
         RuntimeDirectory = "arbor";
         Restart = "on-failure";
         RestartSec = 2;

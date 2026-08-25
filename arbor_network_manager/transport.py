@@ -91,6 +91,10 @@ class ProviderSocketServer:
         except OSError as exc:
             raise OSError(f"cannot replace provider socket {path}: {exc}") from exc
         self._server = socketserver.ThreadingUnixStreamServer(path, _RequestHandler)
+        # Provider sockets are local IPC endpoints.  The service module places
+        # networkd and providers in the arbor-networkd group; the directory
+        # remains the outer access-control boundary.
+        os.chmod(path, 0o660)
         self._server.daemon_threads = True
         self._server.provider = provider  # type: ignore[attr-defined]
         self._thread: Thread | None = None

@@ -47,7 +47,7 @@ class ExecutionBinding:
             return False
         for index, (network, provider) in enumerate(wanted):
             edge = next((e for e in current[index:] if e.network == network and e.provider == provider), None)
-            if edge is None or not snapshot.endpoint_is_usable(edge):
+            if edge is None or not snapshot.endpoint_is_reachable(edge):
                 return False
         target = next((e for e in snapshot.endpoints if e.node == self.target and e.generation == self.target_endpoint_generation), None)
         if target is None:
@@ -135,7 +135,7 @@ class RouteSolver:
             if edge.endpoint_revoked:
                 rejected.append(f"{edge.network}: endpoint generation is revoked")
                 continue
-            if not snapshot.endpoint_is_usable(edge):
+            if not snapshot.endpoint_is_reachable(edge):
                 rejected.append(f"{edge.source}->{edge.target} via {edge.network}: stale or unaccepted endpoint generation")
                 continue
             if edge.network in constraints.avoid_networks:

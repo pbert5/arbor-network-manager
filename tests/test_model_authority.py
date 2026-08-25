@@ -11,6 +11,7 @@ class AuthorityParserTests(unittest.TestCase):
     def test_registry_parser_retains_endpoint_records(self):
         snapshot = snapshot_from_registry_mapping({
             "vertices": [{"node": "target"}],
+            "edges": [{"source": "source", "target": "target", "network": "lan", "provider": "lan", "cost": 1, "endpointGeneration": 4}],
             "endpoints": [{
                 "node": "target", "network": "lan", "provider": "lan",
                 "address": "10.0.0.2", "generation": 4,
@@ -18,6 +19,8 @@ class AuthorityParserTests(unittest.TestCase):
         })
         self.assertTrue(snapshot.strict_authority)
         self.assertEqual(snapshot.endpoints[0].generation, 4)
+        self.assertTrue(snapshot.endpoint_is_usable(snapshot.edges[0]))
+        self.assertFalse(snapshot.endpoint_is_reachable(snapshot.edges[0]))
 
     def test_missing_endpoint_is_rejected_in_registry_mode(self):
         with self.assertRaises(ValueError):

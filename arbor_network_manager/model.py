@@ -113,6 +113,12 @@ class NetworkSnapshot:
         )
         if not accepted:
             return not self.strict_authority and not self.endpoints
+        return True
+
+    def endpoint_is_reachable(self, edge: Edge) -> bool:
+        """Return whether accepted authority currently has provider evidence."""
+        if not self.endpoint_is_usable(edge):
+            return False
         if not self.strict_authority and not self.observations:
             return True
         return any(

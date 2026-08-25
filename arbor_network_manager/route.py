@@ -11,6 +11,7 @@ from .model import Edge, Health, NetworkSnapshot
 class RouteConstraints:
     capability: str = "ssh"
     avoid_networks: FrozenSet[str] = frozenset()
+    avoid_providers: FrozenSet[str] = frozenset()
     require_private: bool = False
     max_hops: Optional[int] = None
 
@@ -52,8 +53,17 @@ class RouteSolver:
             if edge.endpoint_revoked:
                 rejected.append(f"{edge.network}: endpoint generation is revoked")
                 continue
+            if not snapshot.endpoint_is_usable(edge):
+                rejected.append(f"{edge.source}->{edge.target} via {edge.network}: stale or unaccepted endpoint generation")
+                continue
             if edge.network in constraints.avoid_networks:
                 rejected.append(f"{edge.network}: excluded by policy")
+                continue
+            if edge.provider in constraints.avoid_providers:
+                rejected.append(f"{edge.provider}: excluded by policy")
+                continue
+            if constraints.require_private and not edge.private:
+                rejected.append(f"{edge.network}: private endpoint required")
                 continue
             if not edge.supports(constraints.capability):
                 rejected.append(f"{edge.source}->{edge.target} via {edge.network}: missing {constraints.capability}")

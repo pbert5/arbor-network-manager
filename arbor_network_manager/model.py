@@ -59,6 +59,7 @@ class Edge:
     transit: Transit = Transit()
     endpoint_generation: int = 0
     endpoint_revoked: bool = False
+    private: bool = False
     reason: str = ""
 
     def supports(self, capability: str) -> bool:
@@ -74,6 +75,27 @@ class NetworkSnapshot:
 
     def node_names(self) -> FrozenSet[str]:
         return frozenset(vertex.node for vertex in self.vertices)
+
+    def endpoint_is_usable(self, edge: Edge) -> bool:
+        """Return whether an edge's advertised endpoint is accepted.
+
+        Older callers may provide only graph edges.  In that compatibility
+        mode the edge's own revocation bit remains authoritative.  When
+        endpoint records are present, an edge must name the current,
+        non-revoked generation for its provider and network.
+        """
+        if edge.endpoint_revoked:
+            return False
+        if not self.endpoints:
+            return True
+        return any(
+            endpoint.node == edge.target
+            and endpoint.network == edge.network
+            and endpoint.provider == edge.provider
+            and endpoint.generation == edge.endpoint_generation
+            and not endpoint.revoked
+            for endpoint in self.endpoints
+        )
 
 
 def snapshot_from_mapping(value: Mapping[str, object]) -> NetworkSnapshot:
@@ -99,6 +121,7 @@ def snapshot_from_mapping(value: Mapping[str, object]) -> NetworkSnapshot:
                 ),
                 endpoint_generation=int(item.get("endpointGeneration", 0)),
                 endpoint_revoked=bool(item.get("endpointRevoked", False)),
+                private=bool(item.get("private", False)),
                 reason=str(item.get("reason", "")),
             )
         )

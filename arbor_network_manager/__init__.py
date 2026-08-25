@@ -5,7 +5,7 @@ from .model import (
     snapshot_from_compatibility_mapping, snapshot_from_mapping,
     snapshot_from_registry_mapping,
 )
-from .route import RouteConstraints, RoutePlan, RouteSolver
+from .route import ExecutionBinding, RouteConstraints, RoutePlan, RouteSolver
 
 __all__ = [
     "Edge",
@@ -16,6 +16,7 @@ __all__ = [
     "Transit",
     "Vertex",
     "RouteConstraints",
+    "ExecutionBinding",
     "RoutePlan",
     "RouteSolver",
     "snapshot_from_mapping",

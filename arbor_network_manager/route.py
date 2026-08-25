@@ -17,6 +17,59 @@ class RouteConstraints:
 
 
 @dataclass(frozen=True)
+class ExecutionBinding:
+    """Immutable identity and topology facts captured for sensitive execution."""
+
+    source: str
+    target: str
+    target_identity_generation: int | None
+    target_endpoint_generation: int | None
+    target_ssh_host_generation: int | None
+    jump_nodes: Tuple[str, ...]
+    jump_identity_generations: Tuple[int | None, ...]
+    jump_endpoint_generations: Tuple[int | None, ...]
+    jump_ssh_host_generations: Tuple[int | None, ...]
+    edge_networks: Tuple[str, ...]
+    edge_providers: Tuple[str, ...]
+    snapshot_digest: str
+    route_digest: str
+    capability: str
+
+    def revalidate(self, snapshot: NetworkSnapshot) -> bool:
+        if snapshot.digest != self.snapshot_digest:
+            return False
+        if self.capability not in {"ssh", "deploy", "network"}:
+            return False
+        endpoints = {(e.node, e.network, e.provider, e.generation): e for e in snapshot.endpoints if not e.revoked}
+        current = tuple(snapshot.edges)
+        wanted = tuple(zip(self.edge_networks, self.edge_providers))
+        if len(current) < len(wanted):
+            return False
+        for index, (network, provider) in enumerate(wanted):
+            edge = next((e for e in current[index:] if e.network == network and e.provider == provider), None)
+            if edge is None or not snapshot.endpoint_is_usable(edge):
+                return False
+        target = next((e for e in snapshot.endpoints if e.node == self.target and e.generation == self.target_endpoint_generation), None)
+        if target is None:
+            return False
+        return (
+            target.identity_generation == self.target_identity_generation
+            and target.ssh_host_generation == self.target_ssh_host_generation
+            and tuple(
+                (node, identity, endpoint, ssh)
+                for node, identity, endpoint, ssh in zip(
+                    self.jump_nodes, self.jump_identity_generations,
+                    self.jump_endpoint_generations, self.jump_ssh_host_generations,
+                )
+            ) == tuple(
+                (node, next((e.identity_generation for e in snapshot.endpoints if e.node == node and e.generation == endpoint), None), endpoint,
+                 next((e.ssh_host_generation for e in snapshot.endpoints if e.node == node and e.generation == endpoint), None))
+                for node, endpoint in zip(self.jump_nodes, self.jump_endpoint_generations)
+            )
+        )
+
+
+@dataclass(frozen=True)
 class RoutePlan:
     source: str
     target: str
@@ -26,6 +79,7 @@ class RoutePlan:
     cost: int
     snapshot_digest: str
     rejected: Tuple[str, ...] = ()
+    binding: ExecutionBinding | None = None
 
     @property
     def reachable(self) -> bool:
@@ -39,6 +93,34 @@ class RoutePlan:
             suffix = f" ({edge.reason})" if edge.reason else ""
             lines.append(f"  {edge.source} -[{edge.network}/{edge.provider}]-> {edge.target}{suffix}")
         return "\n".join(lines)
+
+    def bind(self, snapshot: NetworkSnapshot) -> "RoutePlan":
+        if not self.reachable or snapshot.digest != self.snapshot_digest:
+            raise ValueError("route cannot be bound to a different or unreachable snapshot")
+        endpoints = {(e.node, e.network, e.provider, e.generation): e for e in snapshot.endpoints if not e.revoked}
+        target_edge = self.edges[-1]
+        target = endpoints.get((target_edge.target, target_edge.network, target_edge.provider, target_edge.endpoint_generation))
+        if target is None:
+            raise ValueError("target endpoint is not accepted in this snapshot")
+        jumps = self.nodes[1:-1]
+        jump_records = []
+        for node, edge in zip(jumps, self.edges[:-1]):
+            record = endpoints.get((node, edge.network, edge.provider, edge.endpoint_generation))
+            if record is None:
+                raise ValueError(f"jump endpoint is not accepted: {node}")
+            jump_records.append(record)
+        import hashlib
+        material = repr((self.source, self.target, self.capability, self.nodes, self.edges, snapshot.digest)).encode()
+        binding = ExecutionBinding(
+            self.source, self.target, target.identity_generation, target.generation,
+            target.ssh_host_generation, tuple(jumps),
+            tuple(item.identity_generation for item in jump_records),
+            tuple(item.generation for item in jump_records),
+            tuple(item.ssh_host_generation for item in jump_records),
+            tuple(edge.network for edge in self.edges), tuple(edge.provider for edge in self.edges),
+            snapshot.digest, hashlib.sha256(material).hexdigest(), self.capability,
+        )
+        return RoutePlan(self.source, self.target, self.capability, self.nodes, self.edges, self.cost, self.snapshot_digest, self.rejected, binding)
 
 
 class RouteSolver:

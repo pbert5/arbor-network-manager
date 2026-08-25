@@ -25,6 +25,8 @@ class Endpoint:
     generation: int
     capabilities: FrozenSet[str] = frozenset()
     revoked: bool = False
+    identity_generation: int | None = None
+    ssh_host_generation: int | None = None
 
 
 @dataclass(frozen=True)
@@ -136,7 +138,11 @@ def _parse_endpoint(item: Mapping[str, object], *, accepted: bool) -> Endpoint |
         capabilities=frozenset(str(x) for x in item.get("capabilities", [])),
     )
     if accepted:
-        return Endpoint(**common, revoked=bool(item.get("revoked", False)))
+        return Endpoint(
+            **common, revoked=bool(item.get("revoked", False)),
+            identity_generation=(None if item.get("identityGeneration") is None else int(item["identityGeneration"])),
+            ssh_host_generation=(None if item.get("sshHostGeneration") is None else int(item["sshHostGeneration"])),
+        )
     return EndpointObservation(
         **common,
         health=Health(str(item.get("health", Health.UNKNOWN.value))),
